@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delhi Kitchen Takeaway Orders</title>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg: #F7ECD9;
+    --panel: #FFFDF8;
+    --ink: #2B1B12;
+    --ink-soft: #6B5847;
+    --red: #B23A2E;
+    --red-dark: #8C2C22;
+    --gold: #D9A441;
+    --green: #3F6B4E;
+    --line: #E7D8BE;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; background: var(--bg); color: var(--ink); }
+  body{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 100px;
+  }
+  h1,h2,h3{ font-family: 'Poppins', -apple-system, sans-serif; font-weight: 700; margin: 0; }
+
+  header{
+    background: var(--red);
+    color: #FBEFE6;
+    padding: 22px 20px 26px;
+    border-bottom: 6px solid var(--gold);
+  }
+  header h1{ font-size: 22px; letter-spacing: 0.2px; }
+  header .sub{ font-size: 14px; opacity: 0.9; margin-top: 4px; }
+  header .date{
+    margin-top: 12px; font-size: 13px; background: rgba(255,255,255,0.14);
+    display:inline-block; padding: 5px 12px; border-radius: 20px;
+  }
+
+  nav{
+    display:flex; gap: 8px; padding: 12px 16px; background: var(--bg);
+    position: sticky; top:0; z-index: 10; border-bottom: 1px solid var(--line);
+  }
+  nav button{
+    flex:1; border:none; background: var(--panel); color: var(--ink-soft);
+    padding: 12px 6px; border-radius: 12px; font-size: 15px; font-weight: 600;
+    border: 2px solid var(--line); cursor:pointer;
+  }
+  nav button.active{ background: var(--red); color:#fff; border-color: var(--red); }
+
+  main{ padding: 16px; max-width: 720px; margin: 0 auto; }
+  .panel{ display:none; }
+  .panel.active{ display:block; }
+
+  .card{
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px; margin-bottom: 14px;
+  }
+  .card h2{ font-size: 17px; margin-bottom: 10px; color: var(--red-dark); }
+  .card h3{ font-size: 14px; margin-bottom: 8px; color: var(--ink-soft); }
+
+  .row{ display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+  input[type=text], input[type=number], input[type=date], select{
+    font-size: 17px; padding: 12px 14px; border-radius: 10px; border: 2px solid var(--line);
+    background: #fff; color: var(--ink); width: 100%;
+  }
+  input:focus, select:focus{ outline: none; border-color: var(--red); }
+
+  .big-btn{
+    background: var(--red); color:#fff; border:none; border-radius: 12px;
+    padding: 14px 18px; font-size: 16px; font-weight: 700; cursor:pointer;
+    white-space: nowrap;
+  }
+  .big-btn.secondary{ background: var(--gold); color: var(--ink); }
+  .big-btn.ghost{ background: transparent; color: var(--red); border: 2px solid var(--red); }
+  .big-btn.small{ padding: 10px 14px; font-size: 14px; }
+  .big-btn:active{ transform: scale(0.97); }
+  .big-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+
+  .databank-item{
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 12px 6px; border-bottom: 1px solid var(--line); gap: 10px;
+  }
+  .databank-item:last-child{ border-bottom:none; }
+  .databank-item label{ display:flex; align-items:center; gap:12px; flex:1; cursor:pointer; }
+  .databank-item input[type=checkbox]{ width:24px; height:24px; accent-color: var(--red); flex-shrink:0; }
+  .databank-item .name{ font-weight:600; font-size:15px; }
+  .databank-item .price{ color: var(--ink-soft); font-size: 14px; }
+  .databank-item button{
+    background:none; border:none; color: var(--red); font-size: 20px; cursor:pointer; padding: 4px 8px;
+  }
+
+  .people-list{ display:flex; flex-wrap:wrap; gap: 14px; margin-bottom: 16px; padding: 4px 2px; }
+  #orderCard{
+    min-height: 340px;
+    max-height: 70vh;
+    overflow-y: auto;
+    resize: vertical;
+  }
+
+  .dish-order{
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 16px 6px; border-bottom: 1px solid var(--line);
+  }
+  .dish-order:last-child{ border-bottom: none; }
+  .dish-order .info{ flex:1; }
+  .dish-order .info .name{ font-weight:600; font-size:19px; }
+  .dish-order .info .price{ font-size:15px; color:var(--ink-soft); margin-top: 2px; }
+  .qty-control{ display:flex; align-items:center; gap:12px; }
+  .qty-control button{
+    width:42px; height:42px; border-radius:10px; border:2px solid var(--red);
+    background:#fff; color:var(--red); font-size:22px; font-weight:700; cursor:pointer;
+  }
+  .qty-control .qty{ min-width: 26px; text-align:center; font-weight:700; font-size:19px; }
+  .note-text{ font-size:13px; color:var(--red-dark); font-style:italic; margin-top:4px; }
+  .note-btn{
+    background:none; border:none; color: var(--ink-soft); text-decoration: underline;
+    font-size: 12px; cursor:pointer; padding: 4px 0 0; display:block;
+  }
+
+  table{ width:100%; border-collapse: collapse; font-size: 14px; }
+  th,td{ text-align:left; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+  th{ color: var(--ink-soft); font-size: 12px; text-transform: none; }
+  td.num, th.num{ text-align:right; }
+  tr.total-row td{ font-weight: 700; border-top: 2px solid var(--red); }
+
+  .grand-total{
+    background: var(--green); color:#fff; border-radius: 14px; padding: 14px 18px;
+    text-align:center; margin-top: 10px;
+  }
+  .grand-total .amt{ font-size: 20px; font-weight: 800; font-family:'Poppins',sans-serif; }
+  .grand-total .lbl{ font-size: 12px; opacity: 0.9; }
+
+  .empty{ color: var(--ink-soft); font-size: 14px; padding: 10px 4px; }
+
+  .add-row{ margin-top: 10px; }
+  .divider{ height:1px; background: var(--line); margin: 14px 0; }
+
+  textarea#msgPreview{
+    width:100%; min-height: 160px; font-size:15px; padding:12px; border-radius:10px;
+    border:2px solid var(--line); font-family: inherit; color: var(--ink); background:#fff;
+  }
+  .share-options{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .toast{
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color:#fff; padding: 10px 18px; border-radius: 20px;
+    font-size: 14px; opacity:0; pointer-events:none; transition: opacity 0.25s;
+    z-index: 50;
+  }
+  .toast.show{ opacity: 1; }
+
+  .warning-banner{
+    background: #FBE4E1; border: 2px solid var(--red); color: var(--red-dark);
+    border-radius: 10px; padding: 12px 14px; font-size: 14px; margin-bottom: 12px;
+    line-height: 1.5;
+  }
+  .warning-banner b{ display:block; margin-bottom: 4px; }
+
+  .person-chip{
+    display:inline-flex; align-items:center; gap: 8px;
+    padding: 10px 10px 10px 18px; border-radius: 20px; border: 2px solid var(--line);
+    background: var(--panel); font-weight:600; font-size: 15px; cursor:pointer;
+  }
+  .person-chip.active{ background: var(--green); border-color: var(--green); color:#fff; }
+  .person-chip .remove-x{
+    background: rgba(0,0,0,0.08); border:none; border-radius: 50%;
+    width: 24px; height: 24px; font-size: 14px; line-height:1; cursor:pointer;
+    color: inherit; display:flex; align-items:center; justify-content:center;
+  }
+  .person-chip.active .remove-x{ background: rgba(255,255,255,0.25); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍛 Delhi Kitchen Takeaway Orders</h1>
+  <div class="sub">Set the menu, tap in orders, get the totals instantly</div>
+  <div class="date" id="dateLabel"></div>
+</header>
+
+<nav>
+  <button class="tab-btn active" data-tab="menu">1. Menu</button>
+  <button class="tab-btn" data-tab="order">2. Orders</button>
+  <button class="tab-btn" data-tab="summary">3. Totals</button>
+</nav>
+
+<main>
+
+  <!-- MENU PANEL -->
+  <div class="panel active" id="panel-menu">
+
+    <div class="card">
+      <h2>Which day's menu?</h2>
+      <div class="row">
+        <input type="date" id="menuDate">
+      </div>
+      <div style="font-size:13px;color:var(--ink-soft);margin-top:8px">This is the date you're building the menu <b>for</b>. Changing it doesn't touch your current dish selection or any orders in progress — it only matters when you save.</div>
+
+      <div class="divider"></div>
+
+      <h3>Load a past menu into today's ticks</h3>
+      <div class="row">
+        <input type="date" id="loadMenuDate">
+        <button class="big-btn secondary small" onclick="loadHistoryMenu()">Load this menu</button>
+      </div>
+      <div style="font-size:13px;color:var(--ink-soft);margin-top:8px">Pick a date, and if a menu was saved for it, its tick/untick selection replaces your current one below. The "Which day's menu?" date above stays exactly as you left it.</div>
+    </div>
+
+    <div class="card">
+      <h2>Dish databank <span id="databankCount" style="font-weight:500;font-size:14px;color:var(--ink-soft)"></span></h2>
+      <div style="font-size:13px;color:var(--ink-soft);margin-bottom:6px">Tick the dishes that are on <b>today's</b> menu. Untick ones that aren't — they stay saved in the databank for next time.</div>
+      <div id="databankList"></div>
+      <div class="add-row row">
+        <input type="text" id="dishName" placeholder="Dish name">
+        <input type="number" id="dishPrice" placeholder="£" style="max-width:90px" step="0.50">
+        <button class="big-btn" onclick="addDish()">Add to databank</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Save &amp; share this menu</h2>
+      <div class="row">
+        <button class="big-btn" onclick="saveTodayMenu()">💾 Save this menu</button>
+        <button class="big-btn secondary" onclick="showMenuMessage()">📤 Share menu</button>
+      </div>
+      <div id="msgBox" style="display:none;margin-top:14px">
+        <div class="divider"></div>
+        <h3>Menu message preview — edit if you like</h3>
+        <textarea id="msgPreview"></textarea>
+        <div class="share-options">
+          <button class="big-btn small" onclick="copyMenuMessage()">📋 Copy</button>
+          <button class="big-btn small secondary" onclick="whatsappShare()">💬 WhatsApp</button>
+          <button class="big-btn small ghost" onclick="nativeShare()">⤴ More options</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ORDER PANEL -->
+  <div class="panel" id="panel-order">
+    <div class="card">
+      <h2>Who's ordering?</h2>
+      <div class="people-list" id="peopleList"></div>
+      <div class="row">
+        <input type="text" id="newPersonName" placeholder="Add a name, then press Enter">
+        <button class="big-btn secondary" onclick="addPerson()">Add</button>
+      </div>
+      <div class="divider"></div>
+      <div class="row" style="align-items:center">
+        <label style="font-size:14px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          Minimum spend per order: £
+          <input type="number" id="minSpendInput" value="15" min="0" step="0.50" style="max-width:90px" onchange="updateMinSpend()">
+        </label>
+      </div>
+    </div>
+
+    <div class="card" id="orderCard" style="display:none">
+      <h2 id="orderingForLabel">Order for —</h2>
+      <div id="dishOrderList"></div>
+    </div>
+  </div>
+
+  <!-- SUMMARY PANEL -->
+  <div class="panel" id="panel-summary">
+    <div class="card">
+      <h2>Everyone's totals</h2>
+      <div id="summaryMinSpendWarning" class="warning-banner no-print" style="display:none"></div>
+      <div style="overflow-x:auto">
+        <table id="summaryTable"></table>
+      </div>
+      <div class="grand-total">
+        <div class="lbl">Day's grand total</div>
+        <div class="amt" id="grandTotal">£0.00</div>
+      </div>
+      <div class="row no-print" style="margin-top:14px;align-items:center">
+        <button class="big-btn" onclick="handlePrint()">🖨️ Print grid (paper-style)</button>
+        <label style="font-size:13px;color:var(--ink-soft);display:flex;align-items:center;gap:6px">
+          Extra blank rows: <input type="number" id="blankRowsInput" value="8" min="0" max="30" style="width:60px;padding:6px">
+        </label>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let dishBank = [];        // {id, name, price} - persistent list of all known dishes
+let todayChecked = new Set(); // dish ids on today's menu
+let menuHistory = {};     // { "YYYY-MM-DD": [dishId, ...] }
+let nextDishId = 1;
+let people = [];          // {id, name, orders: {dishId: qty}}
+let nextPersonId = 1;
+let activePersonId = null;
+
+const dateLabel = document.getElementById('dateLabel');
+const menuDateInput = document.getElementById('menuDate');
+const todayStr = new Date().toISOString().slice(0,10);
+menuDateInput.value = todayStr;
+document.getElementById('loadMenuDate').value = todayStr;
+dateLabel.textContent = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
+
+const defaultDishes = [
+  {id: 1, name: "Chicken Sukha Madhuri", price: 8.50},
+  {id: 2, name: "Samosa (2pc)", price: 3.50},
+  {id: 3, name: "Chicken Momo", price: 6.50},
+  {id: 4, name: "Veg Chow Mein", price: 6.50},
+  {id: 5, name: "Chilli Chicken", price: 8.00},
+  {id: 6, name: "Chicken Manchurian", price: 8.00},
+  {id: 7, name: "Dal Makhani", price: 6.50},
+  {id: 8, name: "Butter Chicken", price: 8.50},
+  {id: 9, name: "Chicken Biryani", price: 9.00},
+  {id: 10, name: "Garlic Naan", price: 2.50},
+  {id: 11, name: "Plain Naan", price: 2.50},
+  {id: 12, name: "Rice", price: 5.00},
+  {id: 13, name: "Egg Fried Rice", price: 8.00},
+  {id: 14, name: "Pulao Rice", price: 6.00},
+  {id: 15, name: "Baguette", price: 5.00},
+  {id: 16, name: "Lamb Rogan Josh", price: 9.00},
+  {id: 17, name: "Lamb Chumps", price: 9.00},
+  {id: 18, name: "Lamb Chops", price: 14.00},
+  {id: 19, name: "Mix Grill", price: 11.00},
+  {id: 20, name: "Daal", price: 9.00},
+  {id: 21, name: "Fanta", price: 1.20},
+  {id: 22, name: "Coke", price: 2.00},
+  {id: 23, name: "Thumbs Up", price: 3.00},
+  {id: 24, name: "Kerala Fish Curry", price: 5.50},
+  {id: 25, name: "Pulao Naan", price: 8.00},
+  {id: 26, name: "Popadum", price: 7.00},
+  {id: 27, name: "Achar", price: 1.50},
+  {id: 28, name: "Rhaita", price: 2.30},
+  {id: 29, name: "Vegan Biryani", price: 7.00},
+  {id: 30, name: "Daal Mackhani", price: 7.00},
+  {id: 31, name: "Chicken Chump", price: 6.00},
+  {id: 32, name: "Daal Tarkha", price: 5.50},
+  {id: 33, name: "Bread Crumb Chicken", price: 4.00},
+  {id: 34, name: "Sausage Burger", price: 2.20},
+  {id: 35, name: "Rice, Chicken & Chutney", price: 5.00},
+  {id: 36, name: "Butter Daal", price: 4.00},
+  {id: 37, name: "Rice & Chicken", price: 5.50},
+  {id: 38, name: "Potato Naan", price: 5.60},
+  {id: 39, name: "Veg Spring Rolls", price: 4.00},
+  {id: 40, name: "Daal Chump", price: 5.00},
+];
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCY0dVgQLuh9exaTRZLo2SaIoPLbTb2DrA",
+  authDomain: "delhikitchen-622b4.firebaseapp.com",
+  projectId: "delhikitchen-622b4",
+  storageBucket: "delhikitchen-622b4.firebasestorage.app",
+  messagingSenderId: "206324859968",
+  appId: "1:206324859968:web:0f34829c8ed019f3400ba5"
+};
+
+let db = null;
+try{
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+}catch(e){
+  console.warn('Firebase failed to initialise — data will not be shared/saved:', e);
+  setTimeout(()=>showToast('⚠️ Could not connect to shared database — changes won\'t be saved or synced'), 500);
+}
+
+let bankLoaded = false, historyLoaded = false, checkedLoaded = false, checkedDocExists = false, hasSetInitialChecked = false;
+
+function maybeSetInitialChecked(){
+  if(hasSetInitialChecked || checkedDocExists) return; // already set directly from the synced doc
+  if(!checkedLoaded || !bankLoaded || !historyLoaded) return;
+  hasSetInitialChecked = true;
+  const dates = Object.keys(menuHistory).sort();
+  if(dates.length){
+    todayChecked = new Set(menuHistory[dates[dates.length-1]]);
+  } else {
+    todayChecked = new Set(dishBank.map(d=>d.id));
+  }
+  renderDatabank();
+  persistTodayChecked(); // seed the shared doc so every device starts from the same tick state
+}
+
+function loadStorage(){
+  if(!db){
+    // No Firestore connection — fall back to a one-off local example so the app still works.
+    dishBank = defaultDishes.slice();
+    nextDishId = dishBank.reduce((m,d)=>Math.max(m,d.id),0) + 1;
+    todayChecked = new Set(dishBank.map(d=>d.id));
+    renderDatabank();
+    return;
+  }
+
+  // Live sync: any device that changes the databank, menu history, or today's ticks updates every other device automatically.
+  db.collection('appdata').doc('dish-bank').onSnapshot(doc=>{
+    if(doc.exists && doc.data().value){
+      dishBank = JSON.parse(doc.data().value);
+    } else {
+      dishBank = defaultDishes.slice();
+      persistBank(); // seed it in Firestore the first time
+    }
+    nextDishId = dishBank.reduce((m,d)=>Math.max(m,d.id),0) + 1;
+    bankLoaded = true;
+    renderDatabank();
+    if(activePersonId) renderDishOrderList();
+    maybeSetInitialChecked();
+  }, err=>{ console.warn('dish-bank sync error:', err); showToast('Could not connect to shared database'); });
+
+  db.collection('appdata').doc('menu-history').onSnapshot(doc=>{
+    menuHistory = (doc.exists && doc.data().value) ? JSON.parse(doc.data().value) : {};
+    historyLoaded = true;
+    maybeSetInitialChecked();
+  }, err=>{ console.warn('menu-history sync error:', err); });
+
+  db.collection('appdata').doc('today-checked').onSnapshot(doc=>{
+    checkedLoaded = true;
+    if(doc.exists && doc.data().value){
+      checkedDocExists = true;
+      hasSetInitialChecked = true;
+      todayChecked = new Set(JSON.parse(doc.data().value));
+      renderDatabank();
+      if(activePersonId) renderDishOrderList();
+    } else {
+      checkedDocExists = false;
+      maybeSetInitialChecked();
+    }
+  }, err=>{ console.warn('today-checked sync error:', err); });
+}
+
+async function persistBank(){
+  if(!db) return;
+  try{ await db.collection('appdata').doc('dish-bank').set({value: JSON.stringify(dishBank)}); }
+  catch(e){ console.warn('Could not save dish bank to shared database:', e); }
+}
+async function persistHistory(){
+  if(!db) return;
+  try{ await db.collection('appdata').doc('menu-history').set({value: JSON.stringify(menuHistory)}); }
+  catch(e){ console.warn('Could not save menu history to shared database:', e); }
+}
+async function persistTodayChecked(){
+  if(!db) return;
+  try{ await db.collection('appdata').doc('today-checked').set({value: JSON.stringify(Array.from(todayChecked))}); }
+  catch(e){ console.warn('Could not sync today\'s ticks to shared database:', e); }
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const leavingOrderTab = document.getElementById('panel-order').classList.contains('active') && btn.dataset.tab !== 'order';
+    if(leavingOrderTab && activePersonId !== null){
+      const p = people.find(x=>x.id===activePersonId);
+      if(p){
+        const total = personTotal(p);
+        if(total > 0 && total < minSpend){
+          showToast(`⚠️ ${p.name}'s order (£${total.toFixed(2)}) is below the £${minSpend.toFixed(2)} minimum`);
+        }
+      }
+    }
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-'+btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab === 'order') renderDishOrderList();
+    if(btn.dataset.tab === 'summary'){ renderSummary(); renderSummaryMinSpendWarning(); }
+  });
+});
+
+function formatDateLabel(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  return d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+}
+
+function loadHistoryMenu(){
+  const date = document.getElementById('loadMenuDate').value;
+  if(!date){ showToast('Pick a date first'); return; }
+  if(!menuHistory[date]){ showToast('No menu saved for ' + formatDateLabel(date)); return; }
+  todayChecked = new Set(menuHistory[date]);
+  renderDatabank();
+  persistTodayChecked();
+  showToast('Loaded menu from ' + formatDateLabel(date));
+}
+
+function renderDatabank(){
+  const list = document.getElementById('databankList');
+  const countEl = document.getElementById('databankCount');
+  countEl.textContent = `(${todayChecked.size} of ${dishBank.length} selected for today)`;
+  if(dishBank.length===0){ list.innerHTML = '<div class="empty">No dishes yet — add one below.</div>'; return; }
+  list.innerHTML = dishBank.map(d=>`
+    <div class="databank-item">
+      <label>
+        <input type="checkbox" ${todayChecked.has(d.id)?'checked':''} onchange="toggleDish(${d.id}, this.checked)">
+        <span>
+          <div class="name">${escapeHtml(d.name)}</div>
+          <div class="price">£${d.price.toFixed(2)}</div>
+        </span>
+      </label>
+      <button onclick="removeDish(${d.id})" title="Remove from databank">✕</button>
+    </div>
+  `).join('');
+}
+
+function toggleDish(id, checked){
+  if(checked) todayChecked.add(id); else todayChecked.delete(id);
+  document.getElementById('databankCount').textContent = `(${todayChecked.size} of ${dishBank.length} selected for today)`;
+  persistTodayChecked();
+}
+
+async function addDish(){
+  const nameEl = document.getElementById('dishName');
+  const priceEl = document.getElementById('dishPrice');
+  const name = nameEl.value.trim();
+  const price = parseFloat(priceEl.value);
+  if(!name || isNaN(price)) return;
+  const d = {id: nextDishId++, name, price};
+  dishBank.push(d);
+  todayChecked.add(d.id);
+  nameEl.value=''; priceEl.value='';
+  renderDatabank();
+  await persistBank();
+  await persistTodayChecked();
+  if(activePersonId) renderDishOrderList();
+}
+
+async function removeDish(id){
+  dishBank = dishBank.filter(d=>d.id!==id);
+  todayChecked.delete(id);
+  people.forEach(p=>{ delete p.orders[id]; });
+  renderDatabank();
+  await persistBank();
+  await persistTodayChecked();
+  if(activePersonId) renderDishOrderList();
+}
+
+async function saveTodayMenu(){
+  const date = menuDateInput.value || todayStr;
+  menuHistory[date] = Array.from(todayChecked);
+  await persistHistory();
+  showToast('Menu saved for ' + formatDateLabel(date));
+}
+
+function buildMenuMessage(){
+  const date = menuDateInput.value || todayStr;
+  const items = dishBank.filter(d=>todayChecked.has(d.id));
+  let lines = [`📋 *Menu – ${formatDateLabel(date)}*`, ''];
+  items.forEach((d,i)=> lines.push(`${i+1}. ${d.name} – £${d.price.toFixed(2)}`));
+  lines.push('', 'Reply with your order! 🙏');
+  return lines.join('\n');
+}
+
+function showMenuMessage(){
+  document.getElementById('msgBox').style.display = 'block';
+  document.getElementById('msgPreview').value = buildMenuMessage();
+}
+
+async function copyMenuMessage(){
+  const text = document.getElementById('msgPreview').value;
+  try{
+    await navigator.clipboard.writeText(text);
+    showToast('Copied to clipboard');
+  }catch(e){
+    const ta = document.getElementById('msgPreview');
+    ta.select();
+    document.execCommand('copy');
+    showToast('Copied to clipboard');
+  }
+}
+
+function whatsappShare(){
+  const text = document.getElementById('msgPreview').value;
+  window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+}
+
+async function nativeShare(){
+  const text = document.getElementById('msgPreview').value;
+  if(navigator.share){
+    try{ await navigator.share({ text }); }catch(e){}
+  }else{
+    copyMenuMessage();
+  }
+}
+
+let minSpend = 15;
+
+function renderPeople(){
+  const list = document.getElementById('peopleList');
+  if(people.length===0){ list.innerHTML = '<div class="empty">No one added yet.</div>'; }
+  else{
+    list.innerHTML = people.map(p=>`
+      <div class="person-chip ${p.id===activePersonId?'active':''}" onclick="selectPerson(${p.id})">
+        <span>${escapeHtml(p.name)}</span>
+        <button class="remove-x" onclick="event.stopPropagation(); removePerson(${p.id})" title="Remove ${escapeHtml(p.name)}">✕</button>
+      </div>
+    `).join('');
+  }
+}
+
+function addPerson(){
+  const el = document.getElementById('newPersonName');
+  const name = el.value.trim();
+  if(!name) return;
+  const p = {id: nextPersonId++, name, orders:{}, notes:{}, paid:false};
+  people.push(p);
+  el.value='';
+  renderPeople();
+  selectPerson(p.id);
+}
+document.getElementById('newPersonName').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){ e.preventDefault(); addPerson(); }
+});
+
+function removePerson(id){
+  const p = people.find(x=>x.id===id);
+  people = people.filter(x=>x.id!==id);
+  if(activePersonId === id){
+    activePersonId = null;
+    document.getElementById('orderCard').style.display = 'none';
+  }
+  renderPeople();
+  if(p) showToast('Removed ' + p.name);
+}
+
+function updateMinSpend(){
+  const val = parseFloat(document.getElementById('minSpendInput').value);
+  minSpend = isNaN(val) ? 0 : val;
+}
+
+function getPeopleBelowMinimum(){
+  return people
+    .map(p => ({ name: p.name, total: personTotal(p) }))
+    .filter(x => x.total > 0 && x.total < minSpend);
+}
+
+function renderSummaryMinSpendWarning(){
+  const banner = document.getElementById('summaryMinSpendWarning');
+  const below = getPeopleBelowMinimum();
+  if(below.length === 0){ banner.style.display = 'none'; return; }
+  banner.style.display = 'block';
+  const list = below.map(x => `${escapeHtml(x.name)} (£${x.total.toFixed(2)})`).join(', ');
+  banner.innerHTML = `<b>⚠️ Below the £${minSpend.toFixed(2)} minimum spend</b>${list}`;
+}
+
+function selectPerson(id){
+  // check the person we're leaving before switching away
+  if(activePersonId !== null && activePersonId !== id){
+    const prev = people.find(x=>x.id===activePersonId);
+    if(prev){
+      const total = personTotal(prev);
+      if(total > 0 && total < minSpend){
+        showToast(`⚠️ ${prev.name}'s order (£${total.toFixed(2)}) is below the £${minSpend.toFixed(2)} minimum`);
+      }
+    }
+  }
+  activePersonId = id;
+  renderPeople();
+  const p = people.find(x=>x.id===id);
+  document.getElementById('orderCard').style.display = 'block';
+  document.getElementById('orderingForLabel').textContent = 'Order for — ' + p.name;
+  renderDishOrderList();
+}
+
+function renderDishOrderList(){
+  const p = people.find(x=>x.id===activePersonId);
+  const list = document.getElementById('dishOrderList');
+  if(!p){ list.innerHTML=''; return; }
+  const todaysDishes = dishBank.filter(d=>todayChecked.has(d.id));
+  if(todaysDishes.length===0){ list.innerHTML = "<div class=\"empty\">No dishes on today's menu yet — tick some in the Menu tab.</div>"; return; }
+  list.innerHTML = todaysDishes.map(d=>{
+    const qty = p.orders[d.id] || 0;
+    const note = p.notes && p.notes[d.id];
+    return `
+    <div class="dish-order">
+      <div class="info">
+        <div class="name">${escapeHtml(d.name)}</div>
+        <div class="price">£${d.price.toFixed(2)} each</div>
+        ${note ? `<div class="note-text">📝 ${escapeHtml(note)}</div>` : ''}
+        ${qty > 0 ? `<button class="note-btn" onclick="editNote(${d.id})">${note ? 'Edit note' : '+ Add note (allergy, spice level, etc)'}</button>` : ''}
+      </div>
+      <div class="qty-control">
+        <button onclick="changeQty(${d.id}, -1)">−</button>
+        <div class="qty">${qty}</div>
+        <button onclick="changeQty(${d.id}, 1)">+</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function editNote(dishId){
+  const p = people.find(x=>x.id===activePersonId);
+  if(!p) return;
+  const dish = dishBank.find(d=>d.id===dishId);
+  const existing = (p.notes && p.notes[dishId]) || '';
+  const note = window.prompt(`Note for ${p.name} — ${dish ? dish.name : 'dish'} (e.g. "no nuts", "extra spicy"):`, existing);
+  if(note === null) return; // cancelled
+  if(!p.notes) p.notes = {};
+  const trimmed = note.trim();
+  if(trimmed) p.notes[dishId] = trimmed;
+  else delete p.notes[dishId];
+  renderDishOrderList();
+}
+
+function changeQty(dishId, delta){
+  const p = people.find(x=>x.id===activePersonId);
+  if(!p) return;
+  const current = p.orders[dishId] || 0;
+  const next = Math.max(0, current + delta);
+  if(next===0) delete p.orders[dishId];
+  else p.orders[dishId] = next;
+  renderDishOrderList();
+}
+
+function personTotal(p){
+  let total = 0;
+  for(const dishId in p.orders){
+    const dish = dishBank.find(d=>d.id==dishId);
+    if(dish) total += dish.price * p.orders[dishId];
+  }
+  return total;
+}
+
+function togglePaid(id, checked){
+  const p = people.find(x=>x.id===id);
+  if(p) p.paid = checked;
+}
+
+function renderSummary(){
+  const table = document.getElementById('summaryTable');
+  if(people.length===0){
+    table.innerHTML = '<tr><td class="empty">No orders yet.</td></tr>';
+    document.getElementById('grandTotal').textContent = '£0.00';
+    return;
+  }
+  let rows = `<tr><th>Name</th><th>Order</th><th>Notes</th><th class="num">Total</th><th>Paid</th></tr>`;
+  let grand = 0;
+  people.forEach(p=>{
+    const items = Object.entries(p.orders).map(([dishId, qty])=>{
+      const dish = dishBank.find(d=>d.id==dishId);
+      return dish ? `${qty}× ${dish.name}` : '';
+    }).filter(Boolean).join(', ');
+    const notesText = Object.entries(p.notes||{}).map(([dishId, note])=>{
+      const dish = dishBank.find(d=>d.id==dishId);
+      return dish ? `${dish.name}: ${note}` : '';
+    }).filter(Boolean).join('; ');
+    const total = personTotal(p);
+    grand += total;
+    rows += `<tr>
+      <td>${escapeHtml(p.name)}</td>
+      <td>${items || '—'}</td>
+      <td style="font-style:italic;color:var(--red-dark)">${escapeHtml(notesText)}</td>
+      <td class="num">£${total.toFixed(2)}</td>
+      <td style="text-align:center"><input type="checkbox" ${p.paid?'checked':''} onchange="togglePaid(${p.id}, this.checked)" style="width:22px;height:22px;accent-color:var(--green)"></td>
+    </tr>`;
+  });
+  rows += `<tr class="total-row"><td colspan="3">Grand total</td><td class="num">£${grand.toFixed(2)}</td><td></td></tr>`;
+  table.innerHTML = rows;
+  document.getElementById('grandTotal').textContent = '£' + grand.toFixed(2);
+}
+
+function buildPrintGridHtml(){
+  const dishes = dishBank.filter(d=>todayChecked.has(d.id));
+  const blankCount = parseInt(document.getElementById('blankRowsInput').value, 10) || 0;
+  const title = formatDateLabel(menuDateInput.value || todayStr).toUpperCase();
+
+  // Absolute millimetre widths, computed against the real A4-landscape printable
+  // area. This avoids relying on the browser's print-time "100%" viewport guess,
+  // which varies and was forcing a large, text-shrinking auto-scale.
+  const pageMarginMm = 14; // generous safety border for printers with a larger unprintable edge
+  const pageWidthMm = 297 - (pageMarginMm * 2); // A4 landscape minus margins
+  const nameMm = 16, notesMm = 26, totalMm = 10, paidMm = 6;
+  const reservedMm = nameMm + notesMm + totalMm + paidMm;
+  const perDishMm = dishes.length > 0 ? (pageWidthMm - reservedMm) / dishes.length : 0;
+
+  const colgroup = `<colgroup>
+    <col style="width:${nameMm}mm">
+    ${dishes.map(()=>`<col style="width:${perDishMm.toFixed(2)}mm">`).join('')}
+    <col style="width:${notesMm}mm">
+    <col style="width:${totalMm}mm">
+    <col style="width:${paidMm}mm">
+  </colgroup>`;
+
+  let headerCells = dishes.map((d,i)=>`
+    <th>
+      <div class="colnum">${i+1}</div>
+      <div class="vertname">${escapeHtml(d.name)} — £${d.price.toFixed(2)}</div>
+    </th>`).join('');
+  let rows = `<tr><th class="name-col">NAME</th>${headerCells}<th class="notes-col">NOTES</th><th class="total-col">TOTAL</th><th class="paid-col">PAID</th></tr>`;
+
+  people.forEach(p=>{
+    const cells = dishes.map(d=>{
+      const qty = p.orders[d.id];
+      return `<td>${qty ? qty : ''}</td>`;
+    }).join('');
+    const total = personTotal(p);
+    const notesText = Object.entries(p.notes||{}).map(([dishId, note])=>{
+      const dish = dishBank.find(d=>d.id==dishId);
+      return dish ? `${dish.name}: ${note}` : '';
+    }).filter(Boolean).join('; ');
+    rows += `<tr><td class="name-col">${escapeHtml(p.name)}</td>${cells}<td class="notes-col">${escapeHtml(notesText)}</td><td class="total-col">£${total.toFixed(2)}</td><td class="paid-col">${p.paid ? '✓' : ''}</td></tr>`;
+  });
+
+  for(let i=0;i<blankCount;i++){
+    const cells = dishes.map(()=> '<td></td>').join('');
+    rows += `<tr style="height:28px"><td class="name-col"></td>${cells}<td class="notes-col"></td><td class="total-col"></td><td class="paid-col"></td></tr>`;
+  }
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+  <style>
+    @page{ size: landscape; margin: ${pageMarginMm}mm; }
+    *{ box-sizing: border-box; }
+    html, body{ margin:0; padding:0; }
+    body{ font-family: Arial, sans-serif; width: ${pageWidthMm}mm; }
+    h2{ margin: 0 0 6px; font-size: 16px; }
+
+    table{ border-collapse: collapse; table-layout: fixed; width: ${pageWidthMm}mm; }
+    th, td{ border: 1px solid #000; text-align:center; overflow:hidden; }
+    td{ padding: 2px 3px; font-size:15px; font-weight:600; overflow-wrap: break-word; }
+
+    th{ padding: 3px 1px 5px; vertical-align: bottom; }
+    th .colnum{ font-size:15px; font-weight:800; margin-bottom:3px; }
+    th .vertname{
+      writing-mode: vertical-rl; transform: rotate(180deg);
+      white-space: nowrap; font-size:10px; font-weight:600;
+      height: 40mm; display:inline-block; overflow:hidden;
+    }
+
+    .name-col{ text-align:left; font-weight:700; font-size:12px; line-height:1.15; word-wrap:break-word; overflow-wrap:break-word; }
+    .notes-col{ text-align:left; font-size:10px; font-weight:500; overflow-wrap: break-word; }
+    .total-col{ font-size:11px; }
+    .paid-col{ font-size:16px; }
+  </style></head>
+  <body>
+    <h2>${title}</h2>
+    <table>${colgroup}${rows}</table>
+    <script>window.onload = function(){ window.print(); };<\/script>
+  </body></html>`;
+}
+
+function handlePrint(){
+  const html = buildPrintGridHtml();
+  const printWin = window.open('', '_blank');
+  if(!printWin){
+    showToast('Pop-up blocked — allow pop-ups for this page, or open the file directly in your browser (not just this preview) and try again');
+    return;
+  }
+  printWin.document.open();
+  printWin.document.write(html);
+  printWin.document.close();
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+renderPeople();
+loadStorage();
+</script>
+
+</body>
+</html>
