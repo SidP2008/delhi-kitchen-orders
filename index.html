@@ -207,6 +207,7 @@
   <button class="tab-btn active" data-tab="menu">1. Menu</button>
   <button class="tab-btn" data-tab="order">2. Orders</button>
   <button class="tab-btn" data-tab="summary">3. Totals</button>
+  <button class="tab-btn" data-tab="history">4. History</button>
 </nav>
 
 <main>
@@ -285,8 +286,13 @@
       <div class="row" style="align-items:center">
         <label style="font-size:14px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           Minimum spend per order: £
-          <input type="number" id="minSpendInput" value="20" min="0" step="0.50" style="max-width:90px" onchange="updateMinSpend()">
+          <input type="number" id="minSpendInput" value="15" min="0" step="0.50" style="max-width:90px" onchange="updateMinSpend()">
         </label>
+      </div>
+      <div class="divider"></div>
+      <div class="row" style="align-items:center">
+        <button class="big-btn secondary" onclick="saveOrderHistory()">💾 Save to History</button>
+        <span style="font-size:12px;color:var(--ink-soft)">Saves today's orders as a permanent record. Click again any time to update it with the latest changes.</span>
       </div>
     </div>
 
@@ -317,6 +323,18 @@
     </div>
   </div>
 
+  <!-- HISTORY PANEL -->
+  <div class="panel" id="panel-history">
+    <div class="card">
+      <h2>Look up a past day's orders</h2>
+      <div class="row">
+        <input type="date" id="historySearchDate">
+        <button class="big-btn" onclick="searchOrderHistory()">Search</button>
+      </div>
+      <div id="historyResult" style="margin-top:14px"></div>
+    </div>
+  </div>
+
 </main>
 
 <div class="toast" id="toast"></div>
@@ -337,6 +355,7 @@ const menuDateInput = document.getElementById('menuDate');
 const todayStr = new Date().toISOString().slice(0,10);
 menuDateInput.value = todayStr;
 document.getElementById('loadMenuDate').value = todayStr;
+document.getElementById('historySearchDate').value = todayStr;
 dateLabel.textContent = new Date().toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
 
 menuDateInput.addEventListener('change', ()=>{
@@ -767,7 +786,7 @@ async function nativeShare(){
   }
 }
 
-let minSpend = 20;
+let minSpend = 15;
 
 function renderPeople(){
   const list = document.getElementById('peopleList');
@@ -972,6 +991,78 @@ function togglePaid(id, checked){
   if(!p) return;
   p.paid = checked;
   persistPerson(p);
+}
+
+async function saveOrderHistory(){
+  if(!db){ showToast('Not connected — cannot save to history'); return; }
+  if(!currentOrdersDate){ showToast('No date selected'); return; }
+  const date = currentOrdersDate;
+
+  const snapshot = people.map(p=>{
+    const items = Object.entries(p.orders || {}).map(([dishId, qty])=>{
+      const dish = dishBank.find(d=>d.id==dishId);
+      return dish ? { name: dish.name, price: dish.price, qty } : { name: '(removed dish)', price: 0, qty };
+    });
+    const notes = Object.entries(p.notes || {}).map(([dishId, note])=>{
+      const dish = dishBank.find(d=>d.id==dishId);
+      return { dish: dish ? dish.name : '(removed dish)', note };
+    });
+    const total = items.reduce((sum, it)=> sum + it.price * it.qty, 0);
+    return { name: p.name, items, notes, paid: !!p.paid, total };
+  });
+  const grandTotal = snapshot.reduce((sum, p)=> sum + p.total, 0);
+
+  try{
+    await db.collection('order-history').doc(date).set({
+      people: JSON.stringify(snapshot),
+      grandTotal,
+      savedAt: Date.now()
+    });
+    showToast('Saved to History for ' + formatDateLabel(date));
+  }catch(e){
+    console.warn('Could not save order history:', e);
+    showToast('Could not save to history');
+  }
+}
+
+async function searchOrderHistory(){
+  const date = document.getElementById('historySearchDate').value;
+  const resultDiv = document.getElementById('historyResult');
+  if(!date) return;
+  if(!db){ resultDiv.innerHTML = '<div class="empty">Not connected to the shared database.</div>'; return; }
+
+  resultDiv.innerHTML = '<div class="empty">Loading…</div>';
+  try{
+    const doc = await db.collection('order-history').doc(date).get();
+    if(!doc.exists){
+      resultDiv.innerHTML = `<div class="empty">No saved order history for ${formatDateLabel(date)}.</div>`;
+      return;
+    }
+    const data = doc.data();
+    const peopleList = JSON.parse(data.value || data.people || '[]');
+
+    let rows = `<tr><th>Name</th><th>Order</th><th>Notes</th><th class="num">Total</th><th>Paid</th></tr>`;
+    peopleList.forEach(p=>{
+      const items = (p.items || []).map(it => `${it.qty}× ${it.name}`).join(', ');
+      const notesText = (p.notes || []).map(n => `${n.dish}: ${n.note}`).join('; ');
+      rows += `<tr>
+        <td>${escapeHtml(p.name)}</td>
+        <td>${escapeHtml(items) || '—'}</td>
+        <td style="font-style:italic;color:var(--red-dark)">${escapeHtml(notesText)}</td>
+        <td class="num">£${p.total.toFixed(2)}</td>
+        <td style="text-align:center">${p.paid ? '✓' : ''}</td>
+      </tr>`;
+    });
+    rows += `<tr class="total-row"><td colspan="3">Grand total</td><td class="num">£${(data.grandTotal||0).toFixed(2)}</td><td></td></tr>`;
+
+    const savedTime = data.savedAt ? new Date(data.savedAt).toLocaleString('en-GB') : '';
+    resultDiv.innerHTML = `
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px">Saved ${savedTime}</div>
+      <div style="overflow-x:auto"><table>${rows}</table></div>`;
+  }catch(e){
+    console.warn('Could not load order history:', e);
+    resultDiv.innerHTML = '<div class="empty">Could not load history for this date.</div>';
+  }
 }
 
 function renderSummary(){
