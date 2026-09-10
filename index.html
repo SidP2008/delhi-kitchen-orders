@@ -286,7 +286,7 @@
       <div class="row" style="align-items:center">
         <label style="font-size:14px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           Minimum spend per order: £
-          <input type="number" id="minSpendInput" value="15" min="0" step="0.50" style="max-width:90px" onchange="updateMinSpend()">
+          <input type="number" id="minSpendInput" value="20" min="0" step="0.50" style="max-width:90px" onchange="updateMinSpend()">
         </label>
       </div>
       <div class="divider"></div>
@@ -786,7 +786,7 @@ async function nativeShare(){
   }
 }
 
-let minSpend = 15;
+let minSpend = 20;
 
 function renderPeople(){
   const list = document.getElementById('peopleList');
