@@ -1121,8 +1121,8 @@ function buildPrintGridHtml(){
   // which varies and was forcing a large, text-shrinking auto-scale.
   const pageMarginMm = 14; // generous safety border for printers with a larger unprintable edge
   const pageWidthMm = 297 - (pageMarginMm * 2); // A4 landscape minus margins
-  const nameMm = 16, notesMm = 26, totalMm = 10, paidMm = 6;
-  const reservedMm = nameMm + notesMm + totalMm + paidMm;
+  const nameMm = 16, notesMm = 26; // Total/Paid columns removed from the printout to give the dish columns more room
+  const reservedMm = nameMm + notesMm;
   const perDishMm = dishes.length > 0 ? (pageWidthMm - reservedMm) / dishes.length : 0;
   // Horizontal header text: pick the biggest font that still gives ~5 characters per line in a column
   // (about 6px with ~40 dishes, up to 11px with fewer), so shorter menus print larger.
@@ -1133,8 +1133,6 @@ function buildPrintGridHtml(){
     <col style="width:${nameMm}mm">
     ${dishes.map(()=>`<col style="width:${perDishMm.toFixed(2)}mm">`).join('')}
     <col style="width:${notesMm}mm">
-    <col style="width:${totalMm}mm">
-    <col style="width:${paidMm}mm">
   </colgroup>`;
 
   let headerCells = dishes.map((d,i)=>`
@@ -1143,7 +1141,7 @@ function buildPrintGridHtml(){
       <div class="dn">${escapeHtml(d.name)}</div>
       <div class="dp">£${d.price.toFixed(2)}</div>
     </th>`).join('');
-  const headerRow = `<tr><th class="name-col">NAME</th>${headerCells}<th class="notes-col">NOTES</th><th class="total-col">TOTAL</th><th class="paid-col">PAID</th></tr>`;
+  const headerRow = `<tr><th class="name-col">NAME</th>${headerCells}<th class="notes-col">NOTES</th></tr>`;
 
   let rows = '';
   people.forEach(p=>{
@@ -1151,17 +1149,16 @@ function buildPrintGridHtml(){
       const qty = p.orders[d.id];
       return `<td>${qty ? qty : ''}</td>`;
     }).join('');
-    const total = personTotal(p);
     const notesText = Object.entries(p.notes||{}).map(([dishId, note])=>{
       const dish = dishBank.find(d=>d.id==dishId);
       return dish ? `${dish.name}: ${note}` : '';
     }).filter(Boolean).join('; ');
-    rows += `<tr><td class="name-col">${escapeHtml(p.name)}</td>${cells}<td class="notes-col">${escapeHtml(notesText)}</td><td class="total-col">£${total.toFixed(2)}</td><td class="paid-col">${p.paid ? '✓' : ''}</td></tr>`;
+    rows += `<tr><td class="name-col">${escapeHtml(p.name)}</td>${cells}<td class="notes-col">${escapeHtml(notesText)}</td></tr>`;
   });
 
   for(let i=0;i<blankCount;i++){
     const cells = dishes.map(()=> '<td></td>').join('');
-    rows += `<tr style="height:28px"><td class="name-col"></td>${cells}<td class="notes-col"></td><td class="total-col"></td><td class="paid-col"></td></tr>`;
+    rows += `<tr style="height:28px"><td class="name-col"></td>${cells}<td class="notes-col"></td></tr>`;
   }
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
@@ -1180,7 +1177,7 @@ function buildPrintGridHtml(){
     thead{ display: table-header-group; }
 
     th{ padding: 3px 1px 4px; vertical-align: top; }
-    th .colnum{ font-size:14px; font-weight:800; margin-bottom:3px; }
+    th .colnum{ font-size:10px; font-weight:800; margin-bottom:3px; }
     /* Dish names run horizontally, wrapping inside the narrow column like the original paper sheet */
     th .dn{
       font-size:${headFontPx}px; font-weight:700; line-height:1.15;
@@ -1190,8 +1187,6 @@ function buildPrintGridHtml(){
 
     .name-col{ text-align:left; font-weight:700; font-size:12px; line-height:1.15; word-wrap:break-word; overflow-wrap:break-word; }
     .notes-col{ text-align:left; font-size:10px; font-weight:500; overflow-wrap: break-word; }
-    .total-col{ font-size:11px; }
-    .paid-col{ font-size:16px; }
   </style></head>
   <body>
     <h2>${title}</h2>
