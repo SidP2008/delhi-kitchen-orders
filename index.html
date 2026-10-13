@@ -286,7 +286,7 @@
       <div class="row" style="align-items:center">
         <label style="font-size:14px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           Minimum spend per order: £
-          <input type="number" id="minSpendInput" value="20" min="0" step="0.50" style="max-width:90px" onchange="updateMinSpend()">
+          <input type="number" id="minSpendInput" value="15" min="0" step="0.50" style="max-width:90px" onchange="updateMinSpend()">
         </label>
       </div>
       <div class="divider"></div>
@@ -710,6 +710,22 @@ async function saveTodayMenu(){
   showToast('Menu saved for ' + formatDateLabel(date));
 }
 
+// Single source of truth for menu order: category order first (rice/bread ends up last),
+// then dishes in databank order. Used by the WhatsApp message, the Orders list and the printed
+// grid so "dish 5" is the same dish everywhere. Dishes whose category no longer exists go last.
+function orderedMenuGroups(){
+  const groups = categories.map(cat => ({
+    name: cat,
+    items: dishBank.filter(d => d.category === cat && todayChecked.has(d.id))
+  }));
+  const other = dishBank.filter(d => (!d.category || !categories.includes(d.category)) && todayChecked.has(d.id));
+  if(other.length) groups.push({ name: 'UNCATEGORISED', items: other });
+  return groups.filter(g => g.items.length > 0);
+}
+function orderedMenuDishes(){
+  return orderedMenuGroups().flatMap(g => g.items);
+}
+
 function ordinalSuffix(n){
   if(n>=11 && n<=13) return 'th';
   switch(n % 10){ case 1: return 'st'; case 2: return 'nd'; case 3: return 'rd'; default: return 'th'; }
@@ -723,15 +739,12 @@ function buildMenuMessage(){
   const weekday = d.toLocaleDateString('en-GB', { weekday: 'long' }).toUpperCase();
   const dateHeader = `${day}${ordinalSuffix(day)} ${month} ${weekday}`;
 
-  const groups = [...categories, 'UNCATEGORISED'];
   let n = 1;
   const lines = [dateHeader, ''];
 
-  groups.forEach(cat=>{
-    const items = dishBank.filter(dish => (dish.category || 'UNCATEGORISED') === cat && todayChecked.has(dish.id));
-    if(items.length === 0) return;
-    lines.push(cat.toUpperCase());
-    items.forEach(dish=>{
+  orderedMenuGroups().forEach(group=>{
+    lines.push(group.name.toUpperCase());
+    group.items.forEach(dish=>{
       const priceStr = (dish.price % 1 === 0) ? dish.price.toFixed(0) : dish.price.toFixed(2);
       lines.push(`${n}. ${dish.name.toUpperCase()} £${priceStr}`);
       n++;
@@ -786,7 +799,7 @@ async function nativeShare(){
   }
 }
 
-let minSpend = 20;
+let minSpend = 15;
 
 function renderPeople(){
   const list = document.getElementById('peopleList');
@@ -929,15 +942,15 @@ function renderDishOrderList(){
   const p = people.find(x=>x.id===activePersonId);
   const list = document.getElementById('dishOrderList');
   if(!p){ list.innerHTML=''; return; }
-  const todaysDishes = dishBank.filter(d=>todayChecked.has(d.id));
+  const todaysDishes = orderedMenuDishes();
   if(todaysDishes.length===0){ list.innerHTML = "<div class=\"empty\">No dishes on today's menu yet — tick some in the Menu tab.</div>"; return; }
-  list.innerHTML = todaysDishes.map(d=>{
+  list.innerHTML = todaysDishes.map((d, idx)=>{
     const qty = p.orders[d.id] || 0;
     const note = p.notes && p.notes[d.id];
     return `
     <div class="dish-order">
       <div class="info">
-        <div class="name">${escapeHtml(d.name)}</div>
+        <div class="name">${idx+1}. ${escapeHtml(d.name)}</div>
         <div class="price">£${d.price.toFixed(2)} each</div>
         ${note ? `<div class="note-text">📝 ${escapeHtml(note)}</div>` : ''}
         ${qty > 0 ? `<button class="note-btn" onclick="editNote(${d.id})">${note ? 'Edit note' : '+ Add note (allergy, spice level, etc)'}</button>` : ''}
@@ -1099,7 +1112,7 @@ function renderSummary(){
 }
 
 function buildPrintGridHtml(){
-  const dishes = dishBank.filter(d=>todayChecked.has(d.id));
+  const dishes = orderedMenuDishes(); // same numbering/order as the WhatsApp menu (rice/bread last)
   const blankCount = parseInt(document.getElementById('blankRowsInput').value, 10) || 0;
   const title = formatDateLabel(menuDateInput.value || todayStr).toUpperCase();
 
@@ -1111,6 +1124,10 @@ function buildPrintGridHtml(){
   const nameMm = 16, notesMm = 26, totalMm = 10, paidMm = 6;
   const reservedMm = nameMm + notesMm + totalMm + paidMm;
   const perDishMm = dishes.length > 0 ? (pageWidthMm - reservedMm) / dishes.length : 0;
+  // Horizontal header text: pick the biggest font that still gives ~5 characters per line in a column
+  // (about 6px with ~40 dishes, up to 11px with fewer), so shorter menus print larger.
+  const colInnerPx = perDishMm * 3.78 - 2;
+  const headFontPx = Math.max(6, Math.min(11, Math.floor((colInnerPx / 2.75) * 10) / 10));
 
   const colgroup = `<colgroup>
     <col style="width:${nameMm}mm">
@@ -1123,7 +1140,8 @@ function buildPrintGridHtml(){
   let headerCells = dishes.map((d,i)=>`
     <th>
       <div class="colnum">${i+1}</div>
-      <div class="vertname">${escapeHtml(d.name)} — £${d.price.toFixed(2)}</div>
+      <div class="dn">${escapeHtml(d.name)}</div>
+      <div class="dp">£${d.price.toFixed(2)}</div>
     </th>`).join('');
   const headerRow = `<tr><th class="name-col">NAME</th>${headerCells}<th class="notes-col">NOTES</th><th class="total-col">TOTAL</th><th class="paid-col">PAID</th></tr>`;
 
@@ -1161,13 +1179,14 @@ function buildPrintGridHtml(){
     /* Repeats the header row on every printed page if the table spills past one page */
     thead{ display: table-header-group; }
 
-    th{ padding: 3px 1px 5px; vertical-align: bottom; }
-    th .colnum{ font-size:15px; font-weight:800; margin-bottom:3px; }
-    th .vertname{
-      writing-mode: vertical-rl; transform: rotate(180deg);
-      white-space: nowrap; font-size:10px; font-weight:600;
-      height: 40mm; display:inline-block; overflow:hidden;
+    th{ padding: 3px 1px 4px; vertical-align: top; }
+    th .colnum{ font-size:14px; font-weight:800; margin-bottom:3px; }
+    /* Dish names run horizontally, wrapping inside the narrow column like the original paper sheet */
+    th .dn{
+      font-size:${headFontPx}px; font-weight:700; line-height:1.15;
+      overflow-wrap:anywhere; word-break:break-word; hyphens:none;
     }
+    th .dp{ font-size:${headFontPx}px; font-weight:600; margin-top:2px; }
 
     .name-col{ text-align:left; font-weight:700; font-size:12px; line-height:1.15; word-wrap:break-word; overflow-wrap:break-word; }
     .notes-col{ text-align:left; font-size:10px; font-weight:500; overflow-wrap: break-word; }
